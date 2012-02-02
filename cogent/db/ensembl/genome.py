@@ -154,11 +154,11 @@ class Genome(object):
         
         return condition
     
-    def _build_gene_query(self, db, condition, gene_table, gene_id_table, xref_table=None):
-        join_obj = gene_id_table.join(gene_table, gene_id_table.c.gene_id==gene_table.c.gene_id)
-        select_obj = [gene_id_table.c.stable_id, gene_table]
+    def _build_gene_query(self, db, condition, gene_table, xref_table=None):
+        join_obj = None
+        select_obj = [gene_table]
         if db.Type == 'core':
-            join_obj = join_obj.outerjoin(xref_table, gene_table.c.display_xref_id==xref_table.c.xref_id)
+            join_obj = gene_table.outerjoin(xref_table, gene_table.c.display_xref_id==xref_table.c.xref_id)
             select_obj.append(xref_table.c.display_label)
         query = sql.select(select_obj, from_obj=[join_obj], whereclause=condition)
         return query
@@ -186,17 +186,16 @@ class Genome(object):
                          BioType=None, synonym=None, like=True):
         xref_table = [None, db.getTable('xref')][db.Type == 'core']
         gene_table = db.getTable('gene')
-        gene_id_table = db.getTable('gene_stable_id')
         
         assert Symbol or Description or StableId or BioType, "no valid argument provided"
         if Symbol:
             condition = xref_table.c.display_label==Symbol
         elif StableId:
-            condition = gene_id_table.c.stable_id==StableId
+            condition = gene_table.c.stable_id==StableId
         else:
             condition = self._get_biotype_description_condition(gene_table, Description, BioType, like)
         
-        query = self._build_gene_query(db, condition, gene_table, gene_id_table, xref_table)
+        query = self._build_gene_query(db, condition, gene_table, xref_table)
         
         return query
     
@@ -332,17 +331,16 @@ class Genome(object):
         """returns all genes"""
         xref_table = [None, db.getTable('xref')][db.Type == 'core']
         gene_table = db.getTable('gene')
-        gene_id_table = db.getTable('gene_stable_id')
         
         # note gene records are at chromosome, not contig, level
         condition = gene_table.c.seq_region_id == query_coord.seq_region_id
-        query = self._build_gene_query(db, condition, gene_table, gene_id_table, xref_table)
+        query = self._build_gene_query(db, condition, gene_table, xref_table)
         query = location_query(gene_table, query_coord.EnsemblStart,
                     query_coord.EnsemblEnd, query=query, where=where_feature)
         for record in query.execute():
             new = Coordinate(self, CoordName=query_coord.CoordName,
                             Start=record['seq_region_start'],
-                            End = record['seq_region_end'],
+                            End = record['nd'],
                             Strand = record['seq_region_strand'], 
                             seq_region_id=record['seq_region_id'],
                             ensembl_coord=True)
